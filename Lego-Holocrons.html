@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ᴛʜᴇ ʟᴇɢᴏ-ʜᴏʟᴏᴄʀᴏɴꜱ</title>
+
+    <!-- keep your original CSS file if present -->
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- jQuery + Bootstrap as in your project -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"
+    />
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  </head>
+
+  
+  <body>
+    <!-- ---------- NAV (kept exactly like your structure) ---------- -->
+    <nav>
+      <ul>
+        <li>
+          <a class="logo" onclick="showSide()"
+            ><img src="Fotos/Holocron.png" alt="logo"
+          /></a>
+        </li>
+
+        <li class="hideOnMobile"><a href="2014.html">Profile</a></li>
+        <li class="hideOnMobile"><a href="2015.html">Lists</a></li>
+        <li class="hideOnMobile"><a href="2016.html">Friends</a></li>
+      </ul>
+    </nav>
+
+    <!-- ---------- Main UI ---------- -->
+    <div class="container-main">
+      <div style="margin-bottom: 12px">
+        <button id="load_data" class="btn btn-primary">Load Themes</button>
+        <button
+          id="clear_data"
+          class="btn btn-default"
+          style="display: none; margin-left: 8px"
+        >
+          Reload
+        </button>
+      </div>
+
+      <div class="top-controls" id="controls" style="display: none">
+        <div class="controls-left">
+          <div>
+            <label
+              for="yearSelect"
+              class="small-muted"
+              style="margin-right: 6px"
+              >Year:</label
+            >
+            <select id="yearSelect">
+              <option value="all">All years</option>
+            </select>
+          </div>
+
+          <div class="search-container">
+            <input type="text" id="searchName" placeholder="Search themes..." />
+          </div>
+        </div>
+
+        <div
+          class="controls-right small-muted"
+          id="counts"
+          style="display: flex; gap: 12px; align-items: center"
+        >
+          <div id="themeCount">0 themes</div>
+          <div id="setCount">0 sets (selected year)</div>
+        </div>
+      </div>
+
+      <!-- Themes grid -->
+      <div id="themes_area">
+        <div class="empty">
+          Click <strong>Load Themes</strong> to display themes.
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="section-divider" id="divider" style="display: none"></div>
+
+      <!-- Sets grid -->
+      <div id="sets_area">
+        <div class="empty">Select a year to see sets (or click a theme).</div>
+      </div>
+    </div>
+
+    <script src="iconCart.js"></script>
+
+
+    <script>
+      /* --- Utility: show/hide side nav --- */
+      function showSide() {
+        document.querySelector(".side").style.display = "flex";
+      }
+      function hideSide() {
+        document.querySelector(".side").style.display = "none";
+      }
+
+      /* --- Robust CSV parser (handles quoted fields with commas/newlines) --- */
+      function parseCSV(text) {
+        const rows = [];
+        let cur = "";
+        let row = [];
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+          const ch = text[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (i + 1 < text.length && text[i + 1] === '"') {
+                cur += '"';
+                i++;
+              } else {
+                inQuotes = false;
+              }
+            } else {
+              cur += ch;
+            }
+          } else {
+            if (ch === '"') {
+              inQuotes = true;
+            } else if (ch === ",") {
+              row.push(cur);
+              cur = "";
+            } else if (ch === "\r") {
+              /* ignore */
+            } else if (ch === "\n") {
+              row.push(cur);
+              rows.push(row);
+              row = [];
+              cur = "";
+            } else {
+              cur += ch;
+            }
+          }
+        }
+        if (cur !== "" || row.length > 0) row.push(cur);
+        if (row.length) rows.push(row);
+        return rows;
+      }
+
+      /* --- HTML escape helpers --- */
+      function esc(s) {
+        if (s === null || s === undefined) return "";
+        return String(s).replace(/[&<>"']/g, function (m) {
+          return {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          }[m];
+        });
+      }
+      function escAttr(s) {
+        return esc(s).replace(/"/g, "&quot;");
+      }
+
+      $(document).ready(function () {
+        let allThemes = []; // {id,name,parent_id}
+        let allSets = []; // {set_num,name,year,theme_id,num_parts,img_url}
+        let selectedYear = "all";
+        let selectedThemeId = null;
+
+        // initialize UI
+        $("#load_data").on("click", function () {
+          const $btn = $(this);
+          $btn.prop("disabled", true).text("Loading...");
+          // load themes.csv
+          $.ajax({
+            url: "themes.csv",
+            dataType: "text",
+            cache: false,
+            success: function (themeText) {
+              try {
+                const trows = parseCSV(themeText);
+                if (!trows || trows.length < 1)
+                  throw new Error("themes.csv invalid");
+                const thead = trows[0].map((h) => String(h).trim());
+                const idIdx = thead.indexOf("id");
+                const nameIdx = thead.indexOf("name");
+                const parentIdx = thead.indexOf("parent_id");
+
+                allThemes = [];
+                for (let i = 1; i < trows.length; i++) {
+                  const r = trows[i];
+                  if (!r || r.length === 0) continue;
+                  if (r.every((c) => String(c).trim() === "")) continue;
+                  allThemes.push({
+                    id:
+                      idIdx !== -1 && r[idIdx] !== undefined
+                        ? String(r[idIdx]).trim()
+                        : "",
+                    name:
+                      nameIdx !== -1 && r[nameIdx] !== undefined
+                        ? String(r[nameIdx]).trim()
+                        : "",
+                    parent_id:
+                      parentIdx !== -1 && r[parentIdx] !== undefined
+                        ? String(r[parentIdx]).trim()
+                        : "",
+                  });
+                }
+
+                // load sets.csv after themes
+                $.ajax({
+                  url: "sets.csv",
+                  dataType: "text",
+                  cache: false,
+                  success: function (setText) {
+                    try {
+                      const srows = parseCSV(setText);
+                      if (!srows || srows.length < 1)
+                        throw new Error("sets.csv invalid");
+                      const shead = srows[0].map((h) => String(h).trim());
+                      const idx_set_num = shead.indexOf("set_num");
+                      const idx_name = shead.indexOf("name");
+                      const idx_year = shead.indexOf("year");
+                      const idx_theme_id = shead.indexOf("theme_id");
+                      const idx_num_parts = shead.indexOf("num_parts");
+                      const idx_img = shead.indexOf("img_url");
+
+                      allSets = [];
+                      const yearSet = new Set();
+
+                      for (let i = 1; i < srows.length; i++) {
+                        const r = srows[i];
+                        if (!r || r.length === 0) continue;
+                        if (r.every((c) => String(c).trim() === "")) continue;
+                        const yearVal =
+                          idx_year !== -1 &&
+                          r[idx_year] !== undefined &&
+                          String(r[idx_year]).trim() !== ""
+                            ? Number(r[idx_year])
+                            : "";
+                        const setObj = {
+                          set_num:
+                            idx_set_num !== -1 && r[idx_set_num] !== undefined
+                              ? String(r[idx_set_num]).trim()
+                              : "",
+                          name:
+                            idx_name !== -1 && r[idx_name] !== undefined
+                              ? String(r[idx_name]).trim()
+                              : "",
+                          year: yearVal,
+                          theme_id:
+                            idx_theme_id !== -1 && r[idx_theme_id] !== undefined
+                              ? String(r[idx_theme_id]).trim()
+                              : "",
+                          num_parts:
+                            idx_num_parts !== -1 &&
+                            r[idx_num_parts] !== undefined &&
+                            String(r[idx_num_parts]).trim() !== ""
+                              ? Number(r[idx_num_parts])
+                              : "",
+                          img_url:
+                            idx_img !== -1 && r[idx_img] !== undefined
+                              ? String(r[idx_img]).trim()
+                              : "",
+                        };
+                        allSets.push(setObj);
+                        if (
+                          yearVal !== "" &&
+                          yearVal !== null &&
+                          !isNaN(yearVal)
+                        )
+                          yearSet.add(yearVal);
+                      }
+
+                      // populate year dropdown (sorted descending)
+                      const years = Array.from(yearSet).sort((a, b) => b - a);
+                      const $year = $("#yearSelect");
+                      $year.empty();
+                      $year.append(`<option value="all">All years</option>`);
+                      years.forEach((y) =>
+                        $year.append(`<option value="${y}">${y}</option>`)
+                      );
+
+                      // show controls and render initial themes + sets (All years)
+                      $("#controls").show();
+                      $("#clear_data").show();
+                      $btn.hide();
+
+                      renderThemes(allThemes.slice());
+                      selectedYear = "all";
+                      renderSetsArea(); // show all sets if year != all? we show All years -> all sets
+                    } catch (err) {
+                      alert("Error parsing sets.csv: " + err.message);
+                      console.error(err);
+                      $btn.prop("disabled", false).text("Load Themes");
+                    }
+                  },
+                  error: function () {
+                    alert(
+                      "Could not load sets.csv. Make sure sets.csv exists and is reachable."
+                    );
+                    $btn.prop("disabled", false).text("Load Themes");
+                  },
+                });
+              } catch (err) {
+                alert("Error parsing themes.csv: " + err.message);
+                console.error(err);
+                $btn.prop("disabled", false).text("Load Themes");
+              }
+            },
+            error: function () {
+              alert(
+                "Could not load themes.csv. Make sure themes.csv exists and is reachable."
+              );
+              $btn.prop("disabled", false).text("Load Themes");
+            },
+          });
+        }); // load_data click
+
+        // clear / reload
+        $("#clear_data").on("click", function () {
+          allThemes = [];
+          allSets = [];
+          selectedYear = "all";
+          selectedThemeId = null;
+          $("#controls").hide();
+          $("#load_data").show().prop("disabled", false).text("Load Themes");
+          $("#clear_data").hide();
+          $("#themes_area").html(
+            '<div class="empty">Click <strong>Load Themes</strong> to display themes.</div>'
+          );
+          $("#divider").hide();
+          $("#sets_area").html(
+            '<div class="empty">Select a year to see sets (or click a theme).</div>'
+          );
+        });
+
+        // live search for themes
+        $(document).on("input", "#searchName", function () {
+          const q = $(this).val().trim().toLowerCase();
+          if (!q) {
+            renderThemes(allThemes.slice());
+            return;
+          }
+          const filtered = allThemes.filter(
+            (t) =>
+              (t.name || "").toLowerCase().includes(q) ||
+              String(t.id || "")
+                .toLowerCase()
+                .includes(q)
+          );
+          renderThemes(filtered);
+        });
+
+        // year selection changes - always update sets area (behavior B: show sets of selected year even before selecting theme)
+        $(document).on("change", "#yearSelect", function () {
+          selectedYear = $(this).val();
+          // reset selected theme if you want clicking theme to persist? We'll keep selection if it exists.
+          renderSetsArea();
+        });
+
+        // click on a theme — select that theme and show sets for theme + selected year
+        $(document).on("click", ".theme-card", function (e) {
+          e.preventDefault();
+          const tid = $(this).data("theme-id");
+          selectedThemeId = String(tid);
+          // highlight selected theme visually (simple)
+          $(".theme-card").css("outline", "none");
+          $(this).css("outline", "3px solid rgba(11,94,215,0.12)");
+          renderSetsArea();
+        });
+
+        /* ---------- Render functions ---------- */
+
+        function renderThemes(list) {
+          if (!list || list.length === 0) {
+            $("#themes_area").html('<div class="empty">No themes found.</div>');
+            $("#themeCount").text("0 themes");
+            return;
+          }
+          let html = '<div class="card-container">';
+          list.forEach((t) => {
+            html += `
+            <a class="card theme-card" href="#" data-theme-id="${escAttr(
+              t.id
+            )}">
+              <div class="card-title">${esc(t.name)}</div>
+              <div class="card-sub">ID: ${esc(t.id)}</div>
+            </a>
+          `;
+          });
+          html += "</div>";
+          $("#themes_area").html(html);
+          $("#themeCount").text(
+            list.length + (list.length === 1 ? " theme" : " themes")
+          );
+        }
+
+        // builds the HTML grid for a given array of set objects
+        function buildSetGridHtml(setArray) {
+          if (!setArray || setArray.length === 0) {
+            return '<div class="empty">No sets found for this selection.</div>';
+          }
+          let html = '<div class="card-container">';
+          setArray.forEach((s) => {
+            // trim last two characters of set_num (avoid error if very short)
+            const trimmed = String(s.set_num).slice(0, -2);
+            const legoLink = `https://www.lego.com/de-de/service/building-instructions/${trimmed}`;
+
+            const imgHtml = s.img_url
+              ? `<img class="set-thumb" src="${escAttr(
+                  s.img_url
+                )}" alt="${escAttr(s.name)}">`
+              : `<div class="set-thumb" style="display:flex;align-items:center;justify-content:center;color:#999">No image</div>`;
+
+            html += `
+            <a class="card set-card" href="${escAttr(
+              legoLink
+            )}" target="_blank" rel="noopener noreferrer">
+              ${imgHtml}
+              <div class="card-title">${esc(s.name)}</div>
+              <div class="card-sub">#${esc(s.set_num)} • ${esc(s.year)} • ${esc(
+              s.num_parts || ""
+            )} parts</div>
+            </a>
+          `;
+          });
+          html += "</div>";
+          return html;
+        }
+
+        // render sets area according to selectedYear and selectedThemeId
+        function renderSetsArea() {
+          // --- If NO THEME selected → show nothing ---
+          if (!selectedThemeId) {
+            $("#setCount").text("0 sets");
+            $("#divider").hide();
+            $("#sets_area").html("");
+            return;
+          }
+
+          // --- strict filtering ---
+          let filtered = allSets.filter((s) => {
+            const matchYear =
+              selectedYear === "all" || String(s.year) === String(selectedYear);
+            const matchTheme = String(s.theme_id) === String(selectedThemeId);
+            return matchYear && matchTheme;
+          });
+
+          // --- update counter ---
+          $("#setCount").text(filtered.length + " sets");
+
+          // --- show divider since theme selected ---
+          $("#divider").show();
+
+          // --- theme title + clear button ---
+          const theme = allThemes.find(
+            (t) => String(t.id) === String(selectedThemeId)
+          );
+          const headerHtml = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+      <button class="btn btn-default" id="clearTheme">Clear theme</button>
+      <div style="font-weight:700">${esc(
+        theme ? theme.name : "Selected theme"
+      )}</div>
+    </div>
+  `;
+
+          // --- render cards ---
+          const gridHtml = buildSetGridHtml(filtered);
+
+          $("#sets_area").html(headerHtml + gridHtml);
+        }
+
+        // clear theme selection
+        $(document).on("click", "#clearTheme", function (e) {
+          e.preventDefault();
+          selectedThemeId = null;
+          $(".theme-card").css("outline", "none");
+          renderSetsArea();
+        });
+
+        // helper escape attr (used in renderThemes)
+        function escAttr(s) {
+          return esc(s).replace(/"/g, "&quot;");
+        }
+      }); // ready
+    </script>
+  </body>
+</html>
