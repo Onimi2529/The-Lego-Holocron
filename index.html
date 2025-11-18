@@ -7,6 +7,7 @@
 
     <!-- keep your original CSS file if present -->
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="iconCart.js" />
 
     <!-- jQuery + Bootstrap as in your project -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
@@ -17,7 +18,6 @@
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
   </head>
 
-  
   <body>
     <!-- ---------- NAV (kept exactly like your structure) ---------- -->
     <nav>
@@ -28,9 +28,9 @@
           /></a>
         </li>
 
-        <li class="hideOnMobile"><a href="2014.html">Profile</a></li>
-        <li class="hideOnMobile"><a href="2015.html">Lists</a></li>
-        <li class="hideOnMobile"><a href="2016.html">Friends</a></li>
+        <li><a href="Sets.html">Sets</a></li>
+        <li><a href="Lists.html">Lists</a></li>
+        <li><a href="Friends.html">Friends</a></li>
       </ul>
     </nav>
 
@@ -93,7 +93,6 @@
     </div>
 
     <script src="iconCart.js"></script>
-
 
     <script>
       /* --- Utility: show/hide side nav --- */
@@ -337,22 +336,83 @@
           );
         });
 
-        // live search for themes
-        $(document).on("input", "#searchName", function () {
-          const q = $(this).val().trim().toLowerCase();
-          if (!q) {
-            renderThemes(allThemes.slice());
-            return;
+        // Toggle ownership on star click
+        $(document).on("click", ".owned-star", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const setNum = $(this).data("set-num");
+
+          let owned = JSON.parse(localStorage.getItem("ownedSets") || "[]");
+
+          if (owned.includes(setNum)) {
+            owned = owned.filter((x) => x !== setNum);
+            $(this).removeClass("owned");
+          } else {
+            owned.push(setNum);
+            $(this).addClass("owned");
           }
-          const filtered = allThemes.filter(
-            (t) =>
-              (t.name || "").toLowerCase().includes(q) ||
-              String(t.id || "")
-                .toLowerCase()
-                .includes(q)
-          );
-          renderThemes(filtered);
+
+          localStorage.setItem("ownedSets", JSON.stringify(owned));
         });
+
+        // live search for themes
+        // live search for themes
+$(document).on("input", "#searchName", function () {
+  const q = $(this).val().trim().toLowerCase();
+
+  if (!q) {
+    // default full list (not collapsed)
+    renderThemes(allThemes.slice());
+    return;
+  }
+
+  // Step 1: filter themes by name or ID
+  let filtered = allThemes.filter(
+    (t) =>
+      (t.name || "").toLowerCase().includes(q) ||
+      String(t.id || "").toLowerCase().includes(q)
+  );
+
+  // Step 2: group by name
+  const groups = {};
+  filtered.forEach((t) => {
+    const name = t.name.toLowerCase();
+    if (!groups[name]) groups[name] = [];
+    groups[name].push(t);
+  });
+
+  // Step 3: choose the representative with MOST SETS for each name
+  const finalThemes = [];
+  Object.values(groups).forEach((group) => {
+    if (group.length === 1) {
+      finalThemes.push(group[0]);
+      return;
+    }
+
+    // count sets per theme_id
+    let best = group[0];
+    let bestCount = countSetsForTheme(best.id);
+
+    group.forEach((t) => {
+      const c = countSetsForTheme(t.id);
+      if (c > bestCount) {
+        best = t;
+        bestCount = c;
+      }
+    });
+
+    finalThemes.push(best);
+  });
+
+  renderThemes(finalThemes);
+});
+
+// helper to count sets for a theme
+function countSetsForTheme(themeId) {
+  return allSets.filter((s) => String(s.theme_id) === String(themeId)).length;
+}
+
 
         // year selection changes - always update sets area (behavior B: show sets of selected year even before selecting theme)
         $(document).on("change", "#yearSelect", function () {
@@ -372,6 +432,7 @@
           renderSetsArea();
         });
 
+        
         /* ---------- Render functions ---------- */
 
         function renderThemes(list) {
@@ -387,7 +448,6 @@
               t.id
             )}">
               <div class="card-title">${esc(t.name)}</div>
-              <div class="card-sub">ID: ${esc(t.id)}</div>
             </a>
           `;
           });
@@ -403,11 +463,18 @@
           if (!setArray || setArray.length === 0) {
             return '<div class="empty">No sets found for this selection.</div>';
           }
+
+          // Load saved ownership (array of set_nums)
+          const owned = JSON.parse(localStorage.getItem("ownedSets") || "[]");
+
           let html = '<div class="card-container">';
           setArray.forEach((s) => {
-            // trim last two characters of set_num (avoid error if very short)
             const trimmed = String(s.set_num).slice(0, -2);
             const legoLink = `https://www.lego.com/de-de/service/building-instructions/${trimmed}`;
+
+            const isOwned = owned.includes(s.set_num);
+
+            const starClass = isOwned ? "owned-star owned" : "owned-star";
 
             const imgHtml = s.img_url
               ? `<img class="set-thumb" src="${escAttr(
@@ -416,17 +483,22 @@
               : `<div class="set-thumb" style="display:flex;align-items:center;justify-content:center;color:#999">No image</div>`;
 
             html += `
-            <a class="card set-card" href="${escAttr(
-              legoLink
-            )}" target="_blank" rel="noopener noreferrer">
-              ${imgHtml}
-              <div class="card-title">${esc(s.name)}</div>
-              <div class="card-sub">#${esc(s.set_num)} • ${esc(s.year)} • ${esc(
+      <div class="card set-card" data-set-num="${escAttr(s.set_num)}">
+        <div class="${starClass}" data-set-num="${escAttr(s.set_num)}">★</div>
+
+        <a class="set-link" href="${escAttr(
+          legoLink
+        )}" target="_blank" rel="noopener noreferrer">
+          ${imgHtml}
+          <div class="card-title">${esc(s.name)}</div>
+          <div class="card-sub">#${esc(s.set_num)} • ${esc(s.year)} • ${esc(
               s.num_parts || ""
             )} parts</div>
-            </a>
-          `;
+        </a>
+      </div>
+    `;
           });
+
           html += "</div>";
           return html;
         }
@@ -490,4 +562,5 @@
     </script>
   </body>
 </html>
+
 
