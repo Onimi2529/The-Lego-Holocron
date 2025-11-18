@@ -24,6 +24,12 @@ svg {
     height: 20px;
 }
 
+nav li .logo:hover {
+    background-color: #2d5aec;
+    opacity: 0.5;
+    border-radius: 30%;
+}
+
 .logo2 img {
     height: 20px;
 }
@@ -56,11 +62,6 @@ nav ul {
     align-items: center;
 }
 
-nav li .logo:hover {
-background-color: #2d5aec;
-opacity: 0.5;
-border-radius: 99%;
-}
 
 nav li .logo2:hover {
     background-color: #2d5aec;
@@ -365,3 +366,25 @@ nav {
           width: 160px;
         }
       }
+
+      .owned-star {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 22px;
+  cursor: pointer;
+  color: rgba(0,0,0,0.25);
+  text-shadow: 0 0 2px #00000033;
+  transition: color .15s;
+  z-index: 10;
+  position: relative;
+
+}
+
+.owned-star.owned {
+  color: gold;
+}
+
+.set-card {
+  position: relative;
+}
