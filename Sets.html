@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sets Only</title>
+
+    <link rel="stylesheet" href="style.css" />
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"
+    />
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  </head>
+
+  <body>
+    <nav>
+      <ul>
+        <li>
+          <a class="logo" href="Lego-Holocrons.html"
+            ><img src="Fotos/Holocron.png" alt="logo"
+          /></a>
+        </li>
+        <li><a href="Sets.html">Sets</a></li>
+        <li><a href="Lists.html">Lists</a></li>
+        <li><a href="Friends.html">Friends</a></li>
+      </ul>
+    </nav>
+
+    <div class="container-main">
+      <div style="margin-bottom: 12px">
+        <button id="load_sets" class="btn btn-primary">Load Sets</button>
+        <button
+          id="clear_sets"
+          class="btn btn-default"
+          style="display: none; margin-left: 8px"
+        >
+          Reload
+        </button>
+      </div>
+
+      <div class="top-controls" id="controls" style="display: none">
+        <div class="controls-left">
+          <label for="yearSelect" class="small-muted" style="margin-right: 6px"
+            >Year:</label
+          >
+          <select id="yearSelect">
+            <option value="all">All years</option>
+          </select>
+        </div>
+        <div class="controls-left" style="margin-left: 15px">
+          <label for="themeSelect" class="small-muted" style="margin-right: 6px"
+            >Theme:</label
+          >
+          <select id="themeSelect">
+            <option value="all">All themes</option>
+          </select>
+        </div>
+
+        <div
+          class="controls-right small-muted"
+          id="counts"
+          style="display: flex; gap: 12px; align-items: center"
+        >
+          <div id="setCount">0 sets</div>
+        </div>
+      </div>
+
+      <div id="sets_area">
+        <div class="empty">
+          Click <strong>Load Sets</strong> to display sets.
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function showSide() {
+        document.querySelector(".side").style.display = "flex";
+      }
+      function hideSide() {
+        document.querySelector(".side").style.display = "none";
+      }
+
+      function parseCSV(text) {
+        const rows = [];
+        let cur = "";
+        let row = [];
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+          const ch = text[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (i + 1 < text.length && text[i + 1] === '"') {
+                cur += '"';
+                i++;
+              } else inQuotes = false;
+            } else cur += ch;
+          } else {
+            if (ch === '"') inQuotes = true;
+            else if (ch === ",") {
+              row.push(cur);
+              cur = "";
+            } else if (ch === "\n") {
+              row.push(cur);
+              rows.push(row);
+              row = [];
+              cur = "";
+            } else if (ch !== "\r") cur += ch;
+          }
+        }
+        if (cur !== "" || row.length > 0) row.push(cur);
+        if (row.length) rows.push(row);
+        return rows;
+      }
+
+      function esc(s) {
+        if (!s) return "";
+        return String(s).replace(
+          /[&<>"']/g,
+          (m) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[m])
+        );
+      }
+      function escAttr(s) {
+        return esc(s).replace(/\"/g, "&quot;");
+      }
+
+      $(document).ready(function () {
+        let allSets = [];
+        let selectedYear = "all";
+
+        $("#load_sets").on("click", function () {
+          const $btn = $(this);
+          $btn.prop("disabled", true).text("Loading...");
+
+          $.ajax({
+            url: "sets.csv",
+            dataType: "text",
+            cache: false,
+            success: function (setText) {
+              try {
+                const srows = parseCSV(setText);
+                const head = srows[0].map((h) => String(h).trim());
+                const idx_set = head.indexOf("set_num");
+                const idx_name = head.indexOf("name");
+                const idx_year = head.indexOf("year");
+                const idx_parts = head.indexOf("num_parts");
+                const idx_img = head.indexOf("img_url");
+
+                const yearSet = new Set();
+                allSets = [];
+
+                for (let i = 1; i < srows.length; i++) {
+                  const r = srows[i];
+                  if (!r || r.every((c) => String(c).trim() === "")) continue;
+
+                  const yearVal = r[idx_year] ? Number(r[idx_year]) : "";
+                  if (yearVal && !isNaN(yearVal)) yearSet.add(yearVal);
+
+                  allSets.push({
+                    set_num: r[idx_set],
+                    name: r[idx_name],
+                    year: yearVal,
+                    num_parts: r[idx_parts],
+                    img_url: r[idx_img],
+                  });
+                }
+
+                const years = [...yearSet].sort((a, b) => b - a);
+                const $year = $("#yearSelect");
+                $year.empty().append('<option value="all">All years</option>');
+                years.forEach((y) =>
+                  $year.append(`<option value="${y}">${y}</option>`)
+                );
+
+                $("#controls").show();
+                $("#clear_sets").show();
+                $btn.hide();
+
+                renderSets();
+              } catch (err) {
+                alert(err.message);
+              }
+            },
+            error: function () {
+              alert("Could not load sets.csv");
+              $btn.prop("disabled", false).text("Load Sets");
+            },
+          });
+        });
+
+        $(document).on("change", "#themeSelect", function () {
+          renderSets();
+        });
+
+        // Load themes so we can filter by them
+        $.ajax({
+          url: "themes.csv",
+          dataType: "text",
+          cache: false,
+          success: function (themeText) {
+            const trows = parseCSV(themeText);
+            const thead = trows[0].map((h) => h.trim());
+
+            const idIdx = thead.indexOf("id");
+            const nameIdx = thead.indexOf("name");
+
+            window.allThemes = [];
+
+            for (let i = 1; i < trows.length; i++) {
+              const r = trows[i];
+              if (!r || r.every((x) => String(x).trim() === "")) continue;
+
+              allThemes.push({
+                id: r[idIdx],
+                name: r[nameIdx],
+              });
+            }
+
+            populateThemeDropdown();
+          },
+        });
+
+        function populateThemeDropdown() {
+          const owned = JSON.parse(localStorage.getItem("ownedSets") || "[]");
+
+          // find themes from owned sets only
+          const themeIdsOwned = new Set();
+
+          allSets.forEach((s) => {
+            if (owned.includes(s.set_num)) {
+              themeIdsOwned.add(String(s.theme_id));
+            }
+          });
+
+          const $theme = $("#themeSelect");
+          $theme.empty();
+          $theme.append('<option value="all">All themes</option>');
+
+          allThemes.forEach((t) => {
+            if (themeIdsOwned.has(String(t.id))) {
+              $theme.append(`<option value="${t.id}">${t.name}</option>`);
+            }
+          });
+        }
+
+        $("#clear_sets").on("click", function () {
+          location.reload();
+        });
+
+        $(document).on("change", "#yearSelect", function () {
+          selectedYear = $(this).val();
+          renderSets();
+        });
+
+        $(document).on("change", "#themeSelect", function () {
+          selectedTheme = $(this).val();
+          renderSets();
+        });
+
+        function renderSets() {
+          const owned = JSON.parse(localStorage.getItem("ownedSets") || "[]");
+
+          const selectedTheme = $("#themeSelect").val();
+          const selectedYear = $("#yearSelect").val();
+
+          let filtered = allSets.filter(
+            (s) =>
+              owned.includes(s.set_num) &&
+              (selectedYear === "all" ||
+                String(s.year) === String(selectedYear)) &&
+              (selectedTheme === "all" ||
+                String(s.theme_id) === String(selectedTheme))
+          );
+
+          $("#setCount").text(filtered.length + " sets owned");
+
+          if (!filtered.length) {
+            $("#sets_area").html(
+              '<div class="empty">No owned sets found.</div>'
+            );
+            return;
+          }
+
+          let html = '<div class="card-container">';
+
+          filtered.forEach((s) => {
+            const trimmed = String(s.set_num).slice(0, -2);
+            const link = `https://www.lego.com/de-de/service/building-instructions/${trimmed}`;
+
+            const img = s.img_url
+              ? `<img class="set-thumb" src="${escAttr(s.img_url)}">`
+              : `<div class="set-thumb">No image</div>`;
+
+            html += `
+      <a class="card set-card" href="${escAttr(link)}" target="_blank">
+        ${img}
+        <div class="card-title">${esc(s.name)}</div>
+        <div class="card-sub">#${esc(s.set_num)} • ${esc(s.year)} • ${esc(
+              s.num_parts
+            )} parts</div>
+      </a>
+    `;
+          });
+
+          html += "</div>";
+          $("#sets_area").html(html);
+        }
+      });
+    </script>
+  </body>
+</html>
