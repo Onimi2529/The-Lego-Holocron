@@ -369,16 +369,15 @@ nav {
 
       .owned-star {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  font-size: 22px;
+  top: -5px;
+  right: 90px;
+  font-size: 40px;
   cursor: pointer;
   color: rgba(0,0,0,0.25);
   text-shadow: 0 0 2px #00000033;
   transition: color .15s;
   z-index: 10;
   position: relative;
-
 }
 
 .owned-star.owned {
@@ -388,3 +387,4 @@ nav {
 .set-card {
   position: relative;
 }
+
