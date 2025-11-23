@@ -159,7 +159,6 @@
         let selectedThemeId = null;
 
         // initialize UI
-        $("#load_data").on("click", function () {
           const $btn = $(this);
           $btn.prop("disabled", true).text("Loading...");
           // load themes.csv
@@ -306,7 +305,6 @@
               $btn.prop("disabled", false).text("Load Themes");
             },
           });
-        }); // load_data click
 
         // clear / reload
         $("#clear_data").on("click", function () {
@@ -552,6 +550,7 @@ function countSetsForTheme(themeId) {
     </script>
   </body>
 </html>
+
 
 
 
