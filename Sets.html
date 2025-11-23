@@ -127,7 +127,7 @@
         let allSets = [];
         let selectedYear = "all";
 
-        $("#load_sets").on("click", function () {
+        
           const $btn = $(this);
           $btn.prop("disabled", true).text("Loading...");
 
@@ -185,7 +185,6 @@
               $btn.prop("disabled", false).text("Load Sets");
             },
           });
-        });
 
         $(document).on("change", "#themeSelect", function () {
           renderSets();
@@ -308,5 +307,6 @@
     </script>
   </body>
 </html>
+
 
 
